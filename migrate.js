@@ -1,0 +1,4 @@
+require('dotenv').config();const fs=require('fs'),path=require('path'),{query,pool}=require('./db');
+(async()=>{await query('CREATE TABLE IF NOT EXISTS schema_migrations(version TEXT PRIMARY KEY,applied_at TIMESTAMPTZ DEFAULT now())');
+for(const f of fs.readdirSync(path.join(__dirname,'../db/migrations')).filter(f=>f.endsWith('.sql')).sort()){
+const v=f.split('_')[0];if(!(await query('SELECT 1 FROM schema_migrations WHERE version=$1',[v])).rowCount){const c=await pool.connect();try{await c.query('BEGIN');await c.query(fs.readFileSync(path.join(__dirname,'../db/migrations',f),'utf8'));await c.query('INSERT INTO schema_migrations VALUES($1,now())',[v]);await c.query('COMMIT')}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}}}await pool.end()})().catch(e=>{console.error(e);process.exit(1)});

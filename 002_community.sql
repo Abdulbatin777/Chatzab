@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS communities(
+ id BIGSERIAL PRIMARY KEY, slug VARCHAR(50) UNIQUE NOT NULL, name VARCHAR(100) NOT NULL,
+ description VARCHAR(500) DEFAULT '', owner_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+ visibility VARCHAR(12) NOT NULL DEFAULT 'public', created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS community_members(
+ community_id BIGINT REFERENCES communities(id) ON DELETE CASCADE,
+ user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+ role VARCHAR(16) NOT NULL DEFAULT 'member', joined_at TIMESTAMPTZ DEFAULT now(),
+ PRIMARY KEY(community_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS channels(
+ id BIGSERIAL PRIMARY KEY, community_id BIGINT REFERENCES communities(id) ON DELETE CASCADE,
+ slug VARCHAR(50) NOT NULL, name VARCHAR(100) NOT NULL, kind VARCHAR(16) DEFAULT 'discussion',
+ created_by BIGINT REFERENCES users(id) ON DELETE RESTRICT, UNIQUE(community_id,slug)
+);
+CREATE TABLE IF NOT EXISTS channel_messages(
+ id BIGSERIAL PRIMARY KEY, channel_id BIGINT REFERENCES channels(id) ON DELETE CASCADE,
+ sender_id BIGINT REFERENCES users(id) ON DELETE RESTRICT, body TEXT NOT NULL,
+ pinned BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT now()
+);
