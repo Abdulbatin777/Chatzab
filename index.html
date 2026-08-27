@@ -1,0 +1,68 @@
+<!doctype html><html lang="en"><head><link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#2563eb"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#4f46e5"><link rel="manifest" href="/manifest.json"><title>Chatzab</title>
+<style>*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:#f5f7fb;color:#172033}.app{min-height:100vh;display:grid;grid-template-columns:245px 300px 1fr}aside,.list{background:#fff;border-right:1px solid #e3e7ef;padding:18px}.brand{font-size:25px;font-weight:800;margin-bottom:22px}.nav button,.result{width:100%;border:0;background:none;text-align:left;padding:11px;border-radius:11px;margin:3px 0}.nav button:hover,.result:hover,.result.active{background:#eef1f7}.search{width:100%;padding:11px;border:1px solid #d8dee8;border-radius:11px;margin:10px 0}.main{display:flex;flex-direction:column;min-width:0}.top{background:#fff;border-bottom:1px solid #e3e7ef;padding:15px 18px;display:flex;justify-content:space-between}.badge{font-size:11px;background:#eef2ff;padding:4px 8px;border-radius:99px}.chat{display:flex;flex-direction:column;min-width:0}.messages{flex:1;overflow:auto;padding:18px}.bubble{max-width:75%;padding:10px 13px;background:#fff;border:1px solid #e3e7ef;border-radius:15px;margin:7px 0}.mine{margin-left:auto}.meta{font-size:10px;color:#7b8594;margin-top:4px}.typing{height:20px;color:#697487;font-size:12px;padding-left:18px}.composer{display:flex;gap:8px;background:#fff;padding:12px}.composer input{flex:1;padding:12px;border:1px solid #d8dee8;border-radius:12px}.composer button{border:0;border-radius:12px;background:#4f46e5;color:white;padding:0 16px}.auth{max-width:420px;margin:15vh auto;background:#fff;padding:25px;border-radius:18px;border:1px solid #e3e7ef}.auth input{display:block;width:100%;padding:12px;margin:8px 0;border:1px solid #d8dee8;border-radius:10px}.auth button{width:100%;padding:12px;border:0;border-radius:10px;background:#4f46e5;color:white}@media(max-width:850px){.app{grid-template-columns:1fr}.side,.list{display:none}.bubble{max-width:88%}}</style></head><body><div id="root"></div>
+<script>
+const root=document.getElementById('root');let me=null,current=null,ws=null,typingTimer;
+const esc=s=>{const d=document.createElement('div');d.textContent=s;return d.innerHTML};
+async function api(url,opt={}){const r=await fetch(url,{credentials:'include',headers:{'Content-Type':'application/json',...(opt.headers||{})},...opt});const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.error||'Request failed');return j}
+function loginView(){root.innerHTML='<div class="auth"><h1>Chatzab</h1><p>Sign in to your beta account.</p><input id="u" placeholder="Username or email"><input id="p" type="password" placeholder="Password"><button id="go">Sign in</button><p id="err"></p></div>';go.onclick=async()=>{try{await api('/api/auth/login',{method:'POST',body:JSON.stringify({username:u.value,password:p.value})});await boot()}catch(e){err.textContent=e.message}}}
+async function boot(){try{me=(await api('/api/me')).user;renderApp();connect();loadChats()}catch{loginView()}}
+function renderApp(){root.innerHTML='<div class="app"><aside class="side"><div class="brand">Chatzab</div><div class="nav"><button>💬 Chats</button><button id="groupsBtn">👥 Groups</button><button id="communitiesBtn">🌐 Communities</button><button>📢 Channels</button><button>🔔 Notifications</button><button>⚙️ Settings</button></div></aside><section class="list"><b>People & Chats</b><input id="search" class="search" placeholder="Search people…"><div id="results"></div><hr><div id="chats"></div><div id="socialPanel"></div></section><main class="main"><header class="top"><b id="title">Select a conversation</b><span id="state"><span class="badge">Beta</span></span></header><section class="chat"><div id="messages" class="messages"><p>Select a chat to begin.</p></div><div id="typing" class="typing"></div><form id="form" class="composer"><input id="text" placeholder="Message… (emoji/reply supported)" disabled><button>Send</button></form></section></main></div>';
+search.oninput=async()=>{if(search.value.length<2){results.innerHTML='';return}try{const j=await api('/api/users/search?q='+encodeURIComponent(search.value));results.innerHTML=j.users.map(u=>`<button class="result" data-id="${u.id}">@${esc(u.username)} — ${esc(u.display_name)}</button>`).join('');document.querySelectorAll('.result').forEach(b=>b.onclick=()=>start(Number(b.dataset.id)))}catch{}};
+form.onsubmit=async e=>{
+ e.preventDefault();if(!current)return;
+ try{
+  const fd=new FormData();fd.append('body',text.value.trim());
+  for(const f of files.files)fd.append('files',f);
+  if(!text.value.trim()&&!files.files.length)return;
+  const r=await fetch('/api/conversations/'+current+'/messages-with-files',{method:'POST',credentials:'include',body:fd});
+  const j=await r.json();if(!r.ok)throw Error(j.error||'Upload failed');
+  renderMessage(j.message);text.value='';files.value='';
+ }catch(e){alert(e.message)}
+};
+}
+async function loadChats(){try{const j=await api('/api/conversations');chats.innerHTML=j.conversations.map(c=>`<button class="result" onclick="openChat(${c.id})">💬 Conversation #${c.id}<small> ${c.message_count} messages</small></button>`).join('')}catch{}}
+async function start(uid){try{const j=await api('/api/conversations/direct',{method:'POST',body:JSON.stringify({userId:uid})});await loadChats();openChat(j.conversationId)}catch(e){alert(e.message)}}
+async function openChat(id){current=id;title.textContent='Conversation #'+id;text.disabled=false;messages.innerHTML='';try{const j=await api('/api/conversations/'+id+'/messages');j.messages.forEach(renderMessage);await api('/api/conversations/'+id+'/read',{method:'POST',body:JSON.stringify({messageId:j.messages.at(-1)?.id||0})});if(ws?.readyState===1)ws.send(JSON.stringify({type:'subscribe',conversationId:id}))}catch(e){messages.innerHTML='<p>'+esc(e.message)+'</p>'}}
+function renderMessage(m){
+ const el=document.createElement('div');el.className='bubble '+(m.sender_id===me?.id?'mine':'');
+ let extra='';
+ if(m.replied_to_message_id) extra+='<div class="meta">↩ Reply to #'+m.replied_to_message_id+'</div>';
+ if(m.attachments?.length) extra+='<div class="meta">📎 '+m.attachments.length+' attachment(s)</div>';
+ if(m.reactions?.length) extra+='<div class="meta">'+m.reactions.map(r=>esc(r.emoji)).join(' ')+'</div>';
+ el.innerHTML=esc(m.deleted_at?'Message deleted':m.body)+extra+'<div class="meta">'+new Date(m.created_at).toLocaleTimeString()+(m.edited_at?' · edited':'')+(m.pinned?' · 📌':'')+'</div>';
+ el.dataset.id=m.id;messages.appendChild(el);messages.scrollTop=messages.scrollHeight
+}
+function connect(){ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');ws.onopen=()=>{state.textContent='Connected';if(current)ws.send(JSON.stringify({type:'subscribe',conversationId:current}))};ws.onclose=()=>{state.textContent='Reconnecting…';setTimeout(connect,1500)};ws.onmessage=e=>{let d;try{d=JSON.parse(e.data)}catch{return}if(d.type==='message'&&d.message.sender_id!==me.id)renderMessage(d.message);
+if(d.type==='message_edited'){const el=document.querySelector('[data-id="'+d.messageId+'"]');if(el)el.querySelector('.meta').textContent='edited'}
+if(d.type==='message_deleted'){const el=document.querySelector('[data-id="'+d.messageId+'"]');if(el)el.firstChild.textContent='Message deleted'}
+if(d.type==='reaction'){}
+if(d.type==='typing')typing.textContent=d.typing?'Typing…':''}}
+attach.onclick=()=>files.click();
+voice.onclick=async()=>{
+ if(!current)return;
+ try{
+  const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+  const rec=new MediaRecorder(stream),chunks=[];
+  rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
+  rec.onstop=async()=>{
+   stream.getTracks().forEach(t=>t.stop());
+   const fd=new FormData();fd.append('body','');
+   fd.append('files',new File([new Blob(chunks,{type:'audio/webm'})],'voice-message.webm',{type:'audio/webm'}));
+   const r=await fetch('/api/conversations/'+current+'/messages-with-files',{method:'POST',credentials:'include',body:fd});
+   const j=await r.json();if(r.ok)renderMessage(j.message);else alert(j.error||'Voice upload failed');
+  };
+  rec.start();voice.textContent='⏹️';setTimeout(()=>{if(rec.state==='recording')rec.stop();voice.textContent='🎙️'},60000);
+  rec.onstop=()=>{stream.getTracks().forEach(t=>t.stop());voice.textContent='🎙️'};
+ }catch(e){alert('Microphone permission is unavailable.')}
+};
+async function showGroups(){try{
+ const name=prompt('New group name');if(!name)return;const j=await api('/api/groups',{method:'POST',body:JSON.stringify({title:name})});
+ await loadChats();openChat(j.group.id);
+}catch(e){alert(e.message)}}
+async function showCommunities(){try{
+ const j=await api('/api/communities');socialPanel.innerHTML='<h4>Communities</h4>'+j.communities.map(c=>'<div class="result">🌐 '+esc(c.name)+' <small>'+c.member_count+' members</small><button onclick="joinCommunity('+c.id+')">Join</button></div>').join('');
+}catch(e){alert(e.message)}}
+async function joinCommunity(id){try{await api('/api/communities/'+id+'/join',{method:'POST'});alert('Joined community')}catch(e){alert(e.message)}}
+groupsBtn.onclick=showGroups;communitiesBtn.onclick=showCommunities;
+boot();
+</script><script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(()=>{});}</script></body></html>

@@ -1,0 +1,16 @@
+# Chatzab public-launch checklist
+- [ ] Private GitHub repository
+- [ ] Production PostgreSQL
+- [ ] Secrets stored only in hosting environment
+- [ ] HTTPS/custom domain
+- [ ] /health passes
+- [ ] Database migrations pass
+- [ ] WebSocket over WSS tested
+- [ ] Authentication tested
+- [ ] Persistent media/object storage
+- [ ] Upload/rate limits
+- [ ] Backups
+- [ ] Error monitoring
+- [ ] Terms and privacy pages
+- [ ] Moderation/reporting tested
+- [ ] Chrome PWA installation tested
